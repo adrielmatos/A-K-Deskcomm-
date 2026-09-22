@@ -26,7 +26,7 @@ async function auth(){
   if(m.error) return {supabase,userId,orgId:null};
   return {supabase,userId,orgId:org.data.id,role:"owner"};
 }
-async function audit(supabase,orgId,userId,action,type,id?:string,metadata:Record<string,unknown>={}){if(!orgId||!userId)return;await supabase.from("audit_logs").insert({organization_id:orgId,actor_id:userId,action,resource_type:type,resource_id:id||null,metadata});}
+async function audit(supabase:Awaited<ReturnType<typeof createClient>>,orgId:string,userId:string,action:string,type:string,id?:string,metadata:Record<string,unknown>={}){if(!orgId||!userId)return;await supabase.from("audit_logs").insert({organization_id:orgId,actor_id:userId,action,resource_type:type,resource_id:id||null,metadata});}
 
 export async function GET(req:Request){
   const ip=req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()||"unknown";
