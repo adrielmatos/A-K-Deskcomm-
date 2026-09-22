@@ -8,6 +8,7 @@ export const maxDuration=10;
 
 const PRODUCTS=["INSS","Público","Privado","Cartão consignado","Cartão benefício","Crédito pessoal","Seguro médico","Seguro residencial","Seguro funeral","Energia solar","FGTS","Crédito do Trabalhador/CLT","SIAPE","Militar"];
 
+function sameOrigin(req:Request){const origin=req.headers.get("origin");if(!origin)return true;try{return new URL(origin).origin===new URL(req.url).origin}catch{return false}}
 function fail(message="Operação não autorizada",status=400){return NextResponse.json({error:message},{status,headers:{"Cache-Control":"private, no-store, no-cache"}});}
 async function auth(){
   const supabase=await createClient();
@@ -68,6 +69,7 @@ export async function GET(req:Request){
 }
 
 export async function POST(req:Request){
+  if(!sameOrigin(req))return fail("Origem não autorizada",403);
   const {supabase,userId,orgId}=await auth(); if(!userId||!orgId)return fail("Sessão necessária",401);
   const body=await req.json().catch(()=>null); if(!body||typeof body!=="object")return fail("JSON inválido");
   const resource=typeof body.resource==="string"?body.resource:"";
