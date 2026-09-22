@@ -10,6 +10,7 @@ const allowed=new Set([".csv",".xls",".xlsx",".ods"]);
 const norm=(v:unknown)=>String(v??"").trim();
 function key(s:string){return s.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");}
 export async function POST(req:Request){
+  const origin=req.headers.get("origin"); if(origin){try{if(new URL(origin).origin!==new URL(req.url).origin)return NextResponse.json({error:"Origem não autorizada"},{status:403})}catch{return NextResponse.json({error:"Origem inválida"},{status:403})}}
   const supabase=await createClient();
   const {data}=await supabase.auth.getClaims(); const userId=data?.claims?.sub;
   if(!userId)return NextResponse.json({error:"Sessão necessária"},{status:401});
