@@ -1,0 +1,42 @@
+name: Security Scan
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+  security-events: write
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4.2.2
+        with: { fetch-depth: 0 }
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
+      - name: Explicit secret patterns
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git grep -nE 'sb_(anon|service_role)_[A-Za-z0-9_-]+|VERCEL_TOKEN[[:space:]]*[:=]|OPENAI_API_KEY[[:space:]]*[:=]|STRIPE_SECRET[[:space:]]*[:=]|NEXT_PUBLIC_(SERVICE_ROLE|SECRET)[[:space:]]*[:=]' -- ':!package-lock.json' ':!pnpm-lock.yaml'; then
+            echo "Potential credential exposure detected."
+            exit 1
+          fi
+      - name: Setup Node
+        uses: actions/setup-node@v4.4.0
+        with: { node-version: 22, cache: npm }
+      - name: Install
+        run: npm install --ignore-scripts
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+      - name: Build
+        run: npm run build
