@@ -335,3 +335,39 @@ create or replace function public.match_knowledge(query_embedding extensions.vec
 returns table(id uuid, document_id uuid, content text, similarity float)
 language sql stable security invoker
 as $$ select k.id,k.document_id,k.content,1-(k.embedding <=> query_embedding) from public.knowledge_chunks k where k.organization_id in (select private.user_org_ids()) and k.embedding is not null and 1-(k.embedding <=> query_embedding) >= match_threshold order by k.embedding <=> query_embedding limit least(greatest(match_count,1),50) $$;
+
+-- Least-privilege Data API grants and function exposure.
+revoke execute on function private.user_org_ids() from public, anon;
+revoke execute on function private.is_org_admin(uuid) from public, anon;
+revoke execute on function private.touch_updated_at() from public, anon;
+revoke execute on function private.apply_org_policies(regclass) from public, anon;
+grant usage on schema private to authenticated;
+grant execute on function private.user_org_ids() to authenticated;
+grant execute on function private.is_org_admin(uuid) to authenticated;
+revoke execute on function public.match_knowledge(extensions.vector(384),float,int) from public, anon;
+grant execute on function public.match_knowledge(extensions.vector(384),float,int) to authenticated;
+
+revoke all on all tables in schema public from anon;
+grant select,insert,update,delete on all tables in schema public to authenticated;
+grant all on all tables in schema public to service_role;
+revoke all on all sequences in schema public from anon;
+grant usage,select on all sequences in schema public to authenticated;
+grant all on all sequences in schema public to service_role;
+alter default privileges for role postgres in schema public revoke all on tables from anon, authenticated, service_role;
+alter default privileges for role postgres in schema public revoke all on sequences from anon, authenticated, service_role;
+alter default privileges for role postgres in schema public revoke execute on functions from public, anon, authenticated, service_role;
+
+-- Private Storage bucket for future customer media/import artifacts.
+insert into storage.buckets(id,name,public,file_size_limit)
+values('deskcomm-private','deskcomm-private',false,10485760)
+on conflict(id) do update set public=false,file_size_limit=10485760;
+
+create policy deskcomm_storage_select on storage.objects for select to authenticated
+using(bucket_id='deskcomm-private' and (storage.foldername(name))[1] in (select private.user_org_ids()::text));
+create policy deskcomm_storage_insert on storage.objects for insert to authenticated
+with check(bucket_id='deskcomm-private' and (storage.foldername(name))[1] in (select private.user_org_ids()::text));
+create policy deskcomm_storage_update on storage.objects for update to authenticated
+using(bucket_id='deskcomm-private' and (storage.foldername(name))[1] in (select private.user_org_ids()::text))
+with check(bucket_id='deskcomm-private' and (storage.foldername(name))[1] in (select private.user_org_ids()::text));
+create policy deskcomm_storage_delete on storage.objects for delete to authenticated
+using(bucket_id='deskcomm-private' and (storage.foldername(name))[1] in (select private.user_org_ids()::text));
