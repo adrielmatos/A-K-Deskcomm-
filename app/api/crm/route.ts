@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { createClient } from "@/lib/supabase/server";
+import { rateLimit } from "@/lib/rate-limit";
 import { createLeadSchema, updateLeadSchema, messageSchema, followupSchema, callSchema, quickReplySchema, campaignSchema, automationSchema } from "@/lib/validations";
 
 export const runtime="nodejs";
@@ -28,6 +29,8 @@ async function auth(){
 async function audit(supabase,orgId,userId,action,type,id?:string,metadata:Record<string,unknown>={}){if(!orgId||!userId)return;await supabase.from("audit_logs").insert({organization_id:orgId,actor_id:userId,action,resource_type:type,resource_id:id||null,metadata});}
 
 export async function GET(req:Request){
+  const ip=req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()||"unknown";
+  const rl=await rateLimit("read:"+ip); if(!rl.ok)return fail("Muitas requisições",429);
   const {supabase,userId,orgId}=await auth(); if(!userId||!orgId)return fail("Sessão necessária",401);
   const url=new URL(req.url); const resource=url.searchParams.get("resource")||"dashboard";
   if(resource==="dashboard"){
@@ -69,6 +72,8 @@ export async function GET(req:Request){
 }
 
 export async function POST(req:Request){
+  const ip=req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()||"unknown";
+  const rl=await rateLimit("write:"+ip); if(!rl.ok)return fail("Muitas requisições",429);
   if(!sameOrigin(req))return fail("Origem não autorizada",403);
   const {supabase,userId,orgId}=await auth(); if(!userId||!orgId)return fail("Sessão necessária",401);
   const body=await req.json().catch(()=>null); if(!body||typeof body!=="object")return fail("JSON inválido");
