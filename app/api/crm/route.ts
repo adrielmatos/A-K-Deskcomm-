@@ -56,6 +56,14 @@ export async function GET(req:Request){
     const {data,error}=await supabase.from("audit_logs").select("id,actor_id,action,resource_type,resource_id,outcome,metadata,created_at").eq("organization_id",orgId).order("created_at",{ascending:false}).limit(200);
     if(error)return fail("Falha ao carregar auditoria",500); return NextResponse.json({audit:data||[]});
   }
+  if(resource==="contacts"){
+    const {data,error}=await supabase.from("contacts").select("id,name,phone,email,cpf,blocked,blocked_reason,npd,source,notes,created_at").eq("organization_id",orgId).order("created_at",{ascending:false}).limit(500);
+    if(error)return fail("Falha ao carregar clientes",500); return NextResponse.json({contacts:data||[]});
+  }
+  if(resource==="import_jobs"){
+    const {data,error}=await supabase.from("import_jobs").select("id,file_name,row_count,status,error_message,created_at").eq("organization_id",orgId).order("created_at",{ascending:false}).limit(100);
+    if(error)return fail("Falha ao carregar importações",500); return NextResponse.json({importJobs:data||[]});
+  }
   if(resource==="quick_replies"){
     const {data,error}=await supabase.from("quick_replies").select("id,name,body,created_at").eq("organization_id",orgId).order("created_at");
     if(error)return fail("Falha ao carregar respostas",500); return NextResponse.json({quickReplies:data||[]});
@@ -88,9 +96,28 @@ export async function POST(req:Request){
       await audit(supabase,orgId,userId,"lead.create","lead",lead.data.id,{product:parsed.product});
       return NextResponse.json({ok:true,id:lead.data.id},{status:201});
     }
+    if(resource==="contact_update"){
+      const id=String(body.data?.id||""); const patch:any={};
+      if(typeof body.data?.name==="string")patch.name=body.data.name.trim();
+      if(typeof body.data?.email==="string")patch.email=body.data.email.trim()||null;
+      if(typeof body.data?.notes==="string")patch.notes=body.data.notes.trim()||null;
+      if(!id||!Object.keys(patch).length)return fail("Dados do cliente inválidos");
+      const row=await supabase.from("contacts").update(patch).eq("id",id).eq("organization_id",orgId).select("id").single();
+      if(row.error)return fail("Cliente não encontrado",404);
+      await audit(supabase,orgId,userId,"contact.update","contact",id,Object.keys(patch));
+      return NextResponse.json({ok:true});
+    }
+    if(resource==="followup_update"){
+      const id=String(body.data?.id||""); const status=String(body.data?.status||"");
+      if(!id||!["open","done","cancelled"].includes(status))return fail("Status inválido");
+      const row=await supabase.from("followups").update({status}).eq("id",id).eq("organization_id",orgId).select("id").single();
+      if(row.error)return fail("Follow-up não encontrado",404);
+      await audit(supabase,orgId,userId,"followup.update","followup",id,{status});
+      return NextResponse.json({ok:true});
+    }
     if(resource==="lead_update"){
       const parsed=updateLeadSchema.parse(body.data);
-      const patch={stage:parsed.stage,blocked:parsed.blocked,owner_id:parsed.owner_id,notes:parsed.notes};
+      const patch={stage:parsed.stage,owner_id:parsed.owner_id,notes:parsed.notes};
       const {data,error}=await supabase.from("leads").update(patch).eq("id",parsed.id).eq("organization_id",orgId).select("id").single();
       if(error||!data)return fail("Lead não encontrado",404);
       await audit(supabase,orgId,userId,"lead.update","lead",parsed.id,patch);
