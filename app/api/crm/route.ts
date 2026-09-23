@@ -107,6 +107,18 @@ export async function POST(req:Request){
   const body=await req.json().catch(()=>null); if(!body||typeof body!=="object")return fail("JSON inválido");
   const resource=typeof body.resource==="string"?body.resource:"";
   try{
+    if(resource==="conversation"){
+      const contactId=String(body.data?.contact_id||"");
+      const channel=String(body.data?.channel||"internal");
+      if(!contactId||!["whatsapp","instagram","web","internal"].includes(channel))return fail("Conversa inválida");
+      const contact=await supabase.from("contacts").select("id,blocked,npd").eq("id",contactId).eq("organization_id",orgId).single();
+      if(contact.error||!contact.data)return fail("Cliente não encontrado",404);
+      if(contact.data.blocked||contact.data.npd)return fail("Contato bloqueado por Não Ligar/Não Me Perturbe",409);
+      const row=await supabase.from("conversations").insert({organization_id:orgId,contact_id:contactId,channel,assigned_to:userId,status:"open",last_message_at:new Date().toISOString()}).select("id").single();
+      if(row.error)return fail("Não foi possível abrir conversa",400);
+      await audit(supabase,orgId,userId,"conversation.create","conversation",row.data.id,{channel});
+      return NextResponse.json({ok:true,id:row.data.id},{status:201});
+    }
     if(resource==="lead"){
       const parsed=createLeadSchema.parse(body.data);
       const contact=await supabase.from("contacts").upsert({organization_id:orgId,name:parsed.name,phone:parsed.phone,notes:parsed.notes||null},{onConflict:"organization_id,phone"}).select("id").single();
