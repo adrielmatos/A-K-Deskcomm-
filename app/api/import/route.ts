@@ -22,15 +22,29 @@ export async function POST(req:Request){
  const results:{file:string;read:number;imported:number;skipped:number;error?:string}[]=[];let totalImported=0,totalRead=0,totalSkipped=0;
  for(const file of files){let imported=0,read=0,skipped=0;try{
    const ext="."+file.name.toLowerCase().split(".").pop();if(!allowed.has(ext)||file.size>MAX_FILE_BYTES)throw new Error("Formato ou tamanho inválido (máx. 10 MB por arquivo)");
-   const wb=XLSX.read(Buffer.from(await file.arrayBuffer()),{type:"buffer",cellFormula:false,cellHTML:false,cellDates:true,WTF:false});const sheet=wb.Sheets[wb.SheetNames[0]];if(!sheet)throw new Error("Planilha vazia");
-   const rawRows=XLSX.utils.sheet_to_json<Record<string,unknown>>(sheet,{defval:"",raw:false}).slice(0,MAX_ROWS_PER_FILE);read=rawRows.length;if(!read)throw new Error("Nenhuma linha encontrada");
-   const rows=rawRows.map(raw=>{const r:Record<string,string>={};for(const[k,v]of Object.entries(raw))r[key(k)]=norm(v);return r}).map(r=>({name:r.nome||r.name||r.cliente||r.contato,phone:r.telefone||r.phone||r.celular||r.whatsapp,product:r.produto||r.product||"Não informado",cpf:r.cpf||null,email:r.email||null,notes:r.observacoes||r.observacoes_cliente||r.notes||null})).filter(r=>r.name&&r.phone&&r.phone.length<=32);
-   skipped=read-rows.length;const unique=new Map<string,typeof rows[number]>();for(const r of rows)unique.set(r.phone,r);const uniqueRows=[...unique.values()];const phones=uniqueRows.map(r=>r.phone);
-   const blockedSet=new Set<string>();for(let i=0;i<phones.length;i+=500){const {data}=await supabase.from("blocked_numbers").select("phone").eq("organization_id",orgId).in("phone",phones.slice(i,i+500));(data||[]).forEach(x=>blockedSet.add(x.phone));}
-   const allowedRows=uniqueRows.filter(r=>!blockedSet.has(r.phone));skipped+=uniqueRows.length-allowedRows.length;
-   for(let i=0;i<allowedRows.length;i+=500){const chunk=allowedRows.slice(i,i+500);const c=await supabase.from("contacts").upsert(chunk.map(r=>({organization_id:orgId,name:r.name,phone:r.phone,cpf:r.cpf,email:r.email,notes:r.notes,source:"importacao"})),{onConflict:"organization_id,phone"}).select("id,phone");if(c.error)throw new Error("Falha ao salvar clientes");
-     const ids=new Map((c.data||[]).map(x=>[x.phone,x.id]));const contactIds=[...ids.values()];const existing=await supabase.from("leads").select("contact_id,product").eq("organization_id",orgId).in("contact_id",contactIds);if(existing.error)throw new Error("Falha ao consultar leads existentes");
-     const exists=new Set((existing.data||[]).map(x=>x.contact_id+"|"+x.product));const inserts=chunk.map(r=>({organization_id:orgId,contact_id:ids.get(r.phone)!,product:r.product})).filter(x=>!exists.has(x.contact_id+"|"+x.product));
+   const wb=XLSX.read(Buffer.from(await file.arrayBuffer()),{type:"buffer",cellFormula:false,cellHTML:false,cellDates:true,WTF:false});
+   const rawRows:Record<string,unknown>[]=[];
+   for(const sheetName of wb.SheetNames){
+     const sheet=wb.Sheets[sheetName];
+     if(!sheet)continue;
+     const remaining=MAX_ROWS_PER_FILE-rawRows.length;
+     if(remaining<=0)break;
+     const sheetRows=XLSX.utils.sheet_to_json<Record<string,unknown>>(sheet,{defval:"",raw:false}).slice(0,remaining);
+     rawRows.push(...sheetRows);
+   }
+   read=rawRows.length;if(!read)throw new Error("Nenhuma linha encontrada");
+   const rows=rawRows.map(raw=>{const r:Record<string,string>={};for(const[k,v]of Object.entries(raw))r[key(k)]=norm(v);return r;}).map(r=>({name:r.nome||r.name||r.cliente||r.contato,phone:r.telefone||r.phone||r.celular||r.whatsapp,product:r.produto||r.product||"Não informado",cpf:r.cpf||null,email:r.email||null,notes:r.observacoes||r.observacoes_cliente||r.notes||null})).filter(r=>r.name&&r.phone&&r.phone.length<=32);
+   skipped=read-rows.length;
+   const phones=[...new Set(rows.map(r=>r.phone))];
+   const blockedSet=new Set<string>();
+   for(let i=0;i<phones.length;i+=500){const {data}=await supabase.from("blocked_numbers").select("phone").eq("organization_id",orgId).in("phone",phones.slice(i,i+500));(data||[]).forEach(x=>blockedSet.add(x.phone));}
+   const allowedRows=rows.filter(r=>!blockedSet.has(r.phone));skipped+=rows.length-allowedRows.length;
+   for(let i=0;i<allowedRows.length;i+=500){
+     const chunk=allowedRows.slice(i,i+500);
+     const contactsByPhone=new Map<string,typeof chunk[number]>();for(const row of chunk)contactsByPhone.set(row.phone,row);
+     const c=await supabase.from("contacts").upsert([...contactsByPhone.values()].map(r=>({organization_id:orgId,name:r.name,phone:r.phone,cpf:r.cpf,email:r.email,notes:r.notes,source:"importacao"})),{onConflict:"organization_id,phone"}).select("id,phone");if(c.error)throw new Error("Falha ao salvar clientes");
+     const ids=new Map((c.data||[]).map(x=>[x.phone,x.id]));
+     const inserts=chunk.map(r=>({organization_id:orgId,contact_id:ids.get(r.phone)!,product:r.product}));
      if(inserts.length){const l=await supabase.from("leads").insert(inserts);if(l.error)throw new Error("Falha ao salvar leads");imported+=inserts.length;}
    }
    await supabase.from("import_jobs").insert({organization_id:orgId,file_name:file.name,row_count:imported,status:"completed",created_by:userId});
