@@ -64,6 +64,26 @@ export async function GET(req:Request){
     const {data,error}=await supabase.from("import_jobs").select("id,file_name,row_count,status,error_message,created_at").eq("organization_id",orgId).order("created_at",{ascending:false}).limit(100);
     if(error)return fail("Falha ao carregar importações",500); return NextResponse.json({importJobs:data||[]});
   }
+  if(resource==="followups"){
+    const {data,error}=await supabase.from("followups").select("id,title,due_at,status,notes,lead_id,assigned_to,lead:leads(id,product,stage,contact:contacts(id,name,phone))").eq("organization_id",orgId).order("due_at",{ascending:true}).limit(200);
+    if(error)return fail("Falha ao carregar follow-ups",500); return NextResponse.json({followups:data||[]});
+  }
+  if(resource==="calls"){
+    const {data,error}=await supabase.from("call_logs").select("id,phone,result,duration_seconds,created_at,lead_id").eq("organization_id",orgId).order("created_at",{ascending:false}).limit(200);
+    if(error)return fail("Falha ao carregar ligações",500); return NextResponse.json({calls:data||[]});
+  }
+  if(resource==="ai_agents"){
+    const {data,error}=await supabase.from("ai_agents").select("id,name,provider,model,enabled,budget_cents,created_at").eq("organization_id",orgId).order("created_at",{ascending:false});
+    if(error)return fail("Falha ao carregar agentes",500); return NextResponse.json({agents:data||[]});
+  }
+  if(resource==="ai_skills"){
+    const {data,error}=await supabase.from("ai_skills").select("id,name,description,enabled,created_at").eq("organization_id",orgId).order("created_at",{ascending:false});
+    if(error)return fail("Falha ao carregar skills",500); return NextResponse.json({skills:data||[]});
+  }
+  if(resource==="import_jobs"){
+    const {data,error}=await supabase.from("import_jobs").select("id,file_name,row_count,status,error_message,created_at").eq("organization_id",orgId).order("created_at",{ascending:false}).limit(100);
+    if(error)return fail("Falha ao carregar importações",500); return NextResponse.json({importJobs:data||[]});
+  }
   if(resource==="quick_replies"){
     const {data,error}=await supabase.from("quick_replies").select("id,name,body,created_at").eq("organization_id",orgId).order("created_at");
     if(error)return fail("Falha ao carregar respostas",500); return NextResponse.json({quickReplies:data||[]});
@@ -155,10 +175,22 @@ export async function POST(req:Request){
       const row=await supabase.from("quick_replies").insert({organization_id:orgId,name:parsed.name,body:parsed.body}).select("id").single();
       if(row.error)return fail("Não foi possível criar resposta",400); return NextResponse.json({ok:true,id:row.data.id},{status:201});
     }
+    if(resource==="campaign_update"){
+      const id=String(body.data?.id||""); const status=String(body.data?.status||"");
+      if(!id||!["draft","active","paused","finished"].includes(status))return fail("Status de campanha inválido");
+      const row=await supabase.from("campaigns").update({status}).eq("id",id).eq("organization_id",orgId).select("id").single();
+      if(row.error)return fail("Campanha não encontrada",404); await audit(supabase,orgId,userId,"campaign.update","campaign",id,{status}); return NextResponse.json({ok:true});
+    }
     if(resource==="campaign"){
       const parsed=campaignSchema.parse(body.data);
       const row=await supabase.from("campaigns").insert({organization_id:orgId,name:parsed.name,product:parsed.product||null,created_by:userId}).select("id").single();
       if(row.error)return fail("Não foi possível criar campanha",400); return NextResponse.json({ok:true,id:row.data.id},{status:201});
+    }
+    if(resource==="automation_toggle"){
+      const id=String(body.data?.id||""); const enabled=Boolean(body.data?.enabled);
+      if(!id)return fail("Automação inválida");
+      const row=await supabase.from("automation_rules").update({enabled}).eq("id",id).eq("organization_id",orgId).select("id").single();
+      if(row.error)return fail("Automação não encontrada",404); await audit(supabase,orgId,userId,"automation.update","automation",id,{enabled}); return NextResponse.json({ok:true});
     }
     if(resource==="automation"){
       const parsed=automationSchema.parse(body.data);
