@@ -85,7 +85,43 @@ function QuickReplies({post,get}:{post:(r:string,x:any)=>Promise<boolean>;get:(r
 
 function Module({resource,title,sub,get}:{resource:string;title:string;sub:string;get:(r:string)=>Promise<any>}){const[r,setR]=useState<any[]>([]),[err,setErr]=useState("");useEffect(()=>{get(resource).then(j=>setR(j[resource]||j.team||j.audit||[])).catch(e=>setErr(e.message))},[resource]);return <><Head title={title} sub={sub}/><div className="card">{err&&<div className="notice errorNotice">{err}</div>}{r.map((x:any,i)=><div className="row" key={x.id||i}><div><b>{x.name||x.action||x.action_name||x.resource_type||"Registro"}</b><small>{x.user_id||x.actor_id||x.resource_id||""}</small></div><span className="pill">{x.role||x.outcome||x.status||""}</span></div>)}{!r.length&&!err&&<div className="empty">Nenhum registro.</div>}</div></>}
 
-function AI({post,get}:{post:(r:string,x:any)=>Promise<boolean>;get:(r:string)=>Promise<any>}){const[agents,setAgents]=useState<any[]>([]),[skills,setSkills]=useState<any[]>([]),[show,setShow]=useState(false),[name,setName]=useState(""),[model,setModel]=useState(""),[skill,setSkill]=useState("");const load=async()=>{const[a,s]=await Promise.all([get("ai_agents"),get("ai_skills")]);setAgents(a.agents||[]);setSkills(s.skills||[])};useEffect(()=>{load()},[]);return <><Head title="IA / RAG" sub="Agentes e skills persistidos; execução externa será conectada por credenciais" action={<button className="btn primary" onClick={()=>setShow(true)}>+ Novo agente</button>}/>{show&&<div className="card"><label>Nome do agente<input value={name} onChange={e=>setName(e.target.value)}/></label><label>Modelo<input value={model} onChange={e=>setModel(e.target.value)} placeholder="ex.: modelo configurado"/></label><button className="btn primary" onClick={async()=>{const ok=await createAgent(post,{name,model});if(ok){setShow(false);setName("");setModel("");load()}}}>Salvar agente</button></div>}<div className="cols"><div className="card"><h3>Agentes</h3>{agents.map(x=><div className="row" key={x.id}><div><b>{x.name}</b><small>{x.model||"Modelo não definido"}</small></div><span className={x.enabled?"pill green":"pill"}>{x.enabled?"Ativo":"Desativado"}</span></div>)}{!agents.length&&<div className="empty">Nenhum agente cadastrado.</div>}</div><div className="card"><h3>Skills</h3>{skills.map(x=><div className="row" key={x.id}><span>{x.name}</span><span className="pill">{x.enabled?"Ativa":"Desativada"}</span></div>)}{!skills.length&&<div className="empty">Nenhuma skill cadastrada.</div>}<div className="row"><input value={skill} onChange={e=>setSkill(e.target.value)} placeholder="Nome da skill"/><button className="btn" onClick={async()=>{if(await post("ai_skill",{name:skill})){setSkill("")}}}>Cadastrar</button></div></div></div></>}
+function AI({post,get}:{post:(r:string,x:any)=>Promise<boolean>;get:(r:string)=>Promise<any>}){
+ const[agents,setAgents]=useState<any[]>([]),[skills,setSkills]=useState<any[]>([]),[show,setShow]=useState(false);
+ const[name,setName]=useState(""),[model,setModel]=useState("openai/gpt-5.6-luna"),[skill,setSkill]=useState("");
+ const[prompt,setPrompt]=useState(""),[answer,setAnswer]=useState(""),[aiBusy,setAiBusy]=useState(false),[aiError,setAiError]=useState("");
+ const load=async()=>{const[a,s]=await Promise.all([get("ai_agents"),get("ai_skills")]);setAgents(a.agents||[]);setSkills(s.skills||[])};
+ useEffect(()=>{load()},[]);
+ const models=[
+  ["openai/gpt-5.6-luna","GPT-5.6 Luna","baixo","Atendimento e alto volume"],
+  ["openai/gpt-5.6-terra","GPT-5.6 Terra","médio","Análise e operação comercial"],
+  ["openai/gpt-5.6-sol","GPT-5.6 Sol","alto","Agentes e tarefas complexas"],
+  ["anthropic/claude-sonnet-4.6","Claude Sonnet 4.6","pago","Alternativa Anthropic"],
+  ["google/gemini-2.5-flash","Gemini 2.5 Flash","pago","Alternativa Google"]
+ ];
+ const run=async()=>{if(!prompt.trim())return;setAiBusy(true);setAiError("");setAnswer("");try{const r=await fetch("/api/ai",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model,prompt})});const j=await r.json();if(!r.ok)throw new Error(j.error||"Falha na IA");setAnswer(j.text||"");}catch(e){setAiError(e instanceof Error?e.message:"Falha na IA")}finally{setAiBusy(false)}};
+ return <><Head title="IA / Agentes / Provedores" sub="Agentes, skills e execução real via AI Gateway" action={<button className="btn primary" onClick={()=>setShow(true)}>+ Novo agente</button>}/>
+ <div className="cols">
+  <div className="card">
+   <h3>Provedores e modelos</h3>
+   <p className="muted">O catálogo fica no CRM. A execução usa AI Gateway, sem expor chaves no navegador.</p>
+   {models.map(([id,label,cost,desc])=><button key={id} className={model===id?"modelChoice active":"modelChoice"} onClick={()=>setModel(id)}><span><b>{label}</b><small>{desc}</small></span><span className="pill">{cost}</span></button>)}
+   <div className="notice">Modo econômico: GPT-5.6 Luna. O AI Gateway informa atualmente US$ 5 de créditos a cada 30 dias para usuários gratuitos; depois disso, o uso é cobrado conforme o provedor/modelo. citeturn1search0turn0search7</div>
+  </div>
+  <div className="card">
+   <h3>Teste operacional da IA</h3>
+   <label>Modelo ativo<select value={model} onChange={e=>setModel(e.target.value)}>{models.map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label>
+   <label>Prompt<textarea className="aiPrompt" value={prompt} onChange={e=>setPrompt(e.target.value)} placeholder="Ex.: crie uma abordagem inicial para um cliente interessado em cartão benefício." maxLength={12000}/></label>
+   <button className="btn primary" disabled={aiBusy||!prompt.trim()} onClick={run}>{aiBusy?"Consultando IA…":"Testar IA agora"}</button>
+   {aiError&&<div className="notice errorNotice">{aiError}</div>}
+   {answer&&<div className="aiAnswer"><b>Resposta</b><p>{answer}</p></div>}
+  </div>
+ </div>
+ {show&&<div className="card"><label>Nome do agente<input value={name} onChange={e=>setName(e.target.value)} placeholder="Ex.: A&K Comercial"/></label><label>Modelo<select value={model} onChange={e=>setModel(e.target.value)}>{models.map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label><button className="btn primary" onClick={async()=>{const ok=await createAgent(post,{name,model});if(ok){setShow(false);setName("");load()}}}>Salvar agente</button></div>}
+ <div className="cols">
+  <div className="card"><h3>Agentes</h3>{agents.map(x=><div className="row" key={x.id}><div><b>{x.name}</b><small>{x.provider||"AI Gateway"} · {x.model||"Modelo não definido"}</small></div><span className={x.enabled?"pill green":"pill"}>{x.enabled?"Ativo":"Desativado"}</span></div>)}{!agents.length&&<div className="empty">Nenhum agente cadastrado.</div>}</div>
+  <div className="card"><h3>Skills</h3>{skills.map(x=><div className="row" key={x.id}><span>{x.name}</span><span className={x.enabled?"pill green":"pill"}>{x.enabled?"Ativa":"Desativada"}</span></div>)}{!skills.length&&<div className="empty">Nenhuma skill cadastrada.</div>}<div className="row"><input value={skill} onChange={e=>setSkill(e.target.value)} placeholder="Nome da skill"/><button className="btn" onClick={async()=>{if(skill.trim()&&await post("ai_skill",{name:skill.trim()})){setSkill("");load()}}}>Cadastrar</button></div></div>
+ </div></>
+}
 
 async function createAgent(post:(r:string,x:any)=>Promise<boolean>,data:any){return post("ai_agent",data)}
 
