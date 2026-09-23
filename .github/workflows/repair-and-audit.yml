@@ -2,7 +2,8 @@ name: Repair and audit Deskcomm
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -10,18 +11,23 @@ permissions:
 
 jobs:
   repair-audit:
-    if: ${{ !contains(github.event.head_commit.message, 'repair:') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Skip repair commits
+        if: startsWith(github.event.head_commit.message, 'repair:')
+        run: echo "Commit de reparo já auditado; encerrando."
+
       - name: Checkout
+        if: ${{ !startsWith(github.event.head_commit.message, 'repair:') }}
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Repair source deterministically
-        shell: python
+        if: ${{ !startsWith(github.event.head_commit.message, 'repair:') }}
         run: |
+          python3 <<'PY'
           from pathlib import Path
 
           desk = Path('app/deskcomm.tsx')
@@ -32,17 +38,17 @@ jobs:
               if pos == -1:
                   raise SystemExit('Não encontrei o ponto seguro para inserir AIProviders')
               component = r'''
-function AIProviders(){
- const providers=[
-  {name:'Vercel AI Gateway',detail:'Roteamento unificado de modelos e observabilidade',cost:'Configuração externa'},
-  {name:'OpenAI',detail:'Modelos OpenAI via variável de ambiente',cost:'API paga conforme uso'},
-  {name:'Anthropic',detail:'Modelos Claude via variável de ambiente',cost:'API paga conforme uso'},
-  {name:'Google Gemini',detail:'Modelos Gemini via variável de ambiente',cost:'Pode ter cota gratuita, conforme a conta e os limites vigentes'}
- ];
- return <><Head title="Provedores de IA" sub="Conectores de modelos usados pelos agentes"/><div className="card"><div className="notice">Nenhuma chave de API é exibida nesta tela. O CRM usa variáveis de ambiente no servidor e nunca grava segredo no navegador.</div>{providers.map(p=><div className="row" key={p.name}><div><b>{p.name}</b><small>{p.detail}</small></div><span className="pill">{p.cost}</span></div>)}</div></>
-}
+          function AIProviders(){
+           const providers=[
+            {name:'Vercel AI Gateway',detail:'Roteamento unificado de modelos e observabilidade',cost:'Configuração externa'},
+            {name:'OpenAI',detail:'Modelos OpenAI via variável de ambiente',cost:'API paga conforme uso'},
+            {name:'Anthropic',detail:'Modelos Claude via variável de ambiente',cost:'API paga conforme uso'},
+            {name:'Google Gemini',detail:'Modelos Gemini via variável de ambiente',cost:'Pode ter cota gratuita, conforme a conta e os limites vigentes'}
+           ];
+           return <><Head title="Provedores de IA" sub="Conectores de modelos usados pelos agentes"/><div className="card"><div className="notice">Nenhuma chave de API é exibida nesta tela. O CRM usa variáveis de ambiente no servidor e nunca grava segredo no navegador.</div>{providers.map(p=><div className="row" key={p.name}><div><b>{p.name}</b><small>{p.detail}</small></div><span className="pill">{p.cost}</span></div>)}</div></>
+          }
 
-'''
+          '''
               text = text[:pos] + component + text[pos:]
           text = text.replace('Customer 360', 'Visão 360 do cliente')
           desk.write_text(text, encoding='utf-8')
@@ -65,53 +71,55 @@ function AIProviders(){
           end = s.find(end_marker)
           if start == -1 or end == -1 or end <= start:
               raise SystemExit('Não encontrei o bloco de importação para corrigir')
-          replacement = r'''   const rawRows:Record<string,unknown>[]=[];
-   for(const sheetName of wb.SheetNames){
-     const sheet=wb.Sheets[sheetName];
-     if(!sheet)continue;
-     const remaining=MAX_ROWS_PER_FILE-rawRows.length;
-     if(remaining<=0)break;
-     const sheetRows=XLSX.utils.sheet_to_json<Record<string,unknown>>(sheet,{defval:"",raw:false}).slice(0,remaining);
-     rawRows.push(...sheetRows);
-   }
-   read=rawRows.length;
-   if(!read)throw new Error("Nenhuma linha encontrada");
-   const rows=rawRows.map(raw=>{
-     const r:Record<string,string>={};
-     for(const[k,v]of Object.entries(raw))r[key(k)]=norm(v);
-     return r;
-   }).map(r=>({
-     name:r.nome||r.name||r.cliente||r.contato,
-     phone:r.telefone||r.phone||r.celular||r.whatsapp,
-     product:r.produto||r.product||"Não informado",
-     cpf:r.cpf||null,
-     email:r.email||null,
-     notes:r.observacoes||r.observacoes_cliente||r.notes||null
-   })).filter(r=>r.name&&r.phone&&r.phone.length<=32);
-   skipped=read-rows.length;
-   const phones=[...new Set(rows.map(r=>r.phone))];
-   const blockedSet=new Set<string>();
-   for(let i=0;i<phones.length;i+=500){
-     const {data}=await supabase.from("blocked_numbers").select("phone").eq("organization_id",orgId).in("phone",phones.slice(i,i+500));
-     (data||[]).forEach(x=>blockedSet.add(x.phone));
-   }
-   const allowedRows=rows.filter(r=>!blockedSet.has(r.phone));
-   skipped+=rows.length-allowedRows.length;
-   for(let i=0;i<allowedRows.length;i+=500){
-     const chunk=allowedRows.slice(i,i+500);
-     const contactsByPhone=new Map<string,typeof chunk[number]>();
-     for(const row of chunk)contactsByPhone.set(row.phone,row);
-     const c=await supabase.from("contacts").upsert([...contactsByPhone.values()].map(r=>({organization_id:orgId,name:r.name,phone:r.phone,cpf:r.cpf,email:r.email,notes:r.notes,source:"importacao"})),{onConflict:"organization_id,phone"}).select("id,phone");
-     if(c.error)throw new Error("Falha ao salvar clientes");
-     const ids=new Map((c.data||[]).map(x=>[x.phone,x.id]));
-     const inserts=chunk.map(r=>({organization_id:orgId,contact_id:ids.get(r.phone)!,product:r.product}));
-     if(inserts.length){
-       const l=await supabase.from("leads").insert(inserts);
-       if(l.error)throw new Error("Falha ao salvar leads");
-       imported+=inserts.length;
-     }
-   }
-'''
+          replacement = r'''          const rawRows:Record<string,unknown>[]=[];
+          for(const sheetName of wb.SheetNames){
+            const sheet=wb.Sheets[sheetName];
+            if(!sheet)continue;
+            const remaining=MAX_ROWS_PER_FILE-rawRows.length;
+            if(remaining<=0)break;
+            const sheetRows=XLSX.utils.sheet_to_json<Record<string,unknown>>(sheet,{defval:"",raw:false}).slice(0,remaining);
+            rawRows.push(...sheetRows);
+          }
+          read=rawRows.length;
+          if(!read)throw new Error("Nenhuma linha encontrada");
+          const rows=rawRows.map(raw=>{
+            const r:Record<string,string>={};
+            for(const[k,v]of Object.entries(raw))r[key(k)]=norm(v);
+            return r;
+          }).map(r=>({
+            name:r.nome||r.name||r.cliente||r.contato,
+            phone:r.telefone||r.phone||r.celular||r.whatsapp,
+            product:r.produto||r.product||"Não informado",
+            cpf:r.cpf||null,
+            email:r.email||null,
+            notes:r.observacoes||r.observacoes_cliente||r.notes||null
+          })).filter(r=>r.name&&r.phone&&r.phone.length<=32);
+          skipped=read-rows.length;
+          const phones=[...new Set(rows.map(r=>r.phone))];
+          const blockedSet=new Set<string>();
+          for(let i=0;i<phones.length;i+=500){
+            const {data}=await supabase.from("blocked_numbers").select("phone").eq("organization_id",orgId).in("phone",phones.slice(i,i+500));
+            (data||[]).forEach(x=>blockedSet.add(x.phone));
+          }
+          const allowedRows=rows.filter(r=>!blockedSet.has(r.phone));
+          skipped+=rows.length-allowedRows.length;
+          for(let i=0;i<allowedRows.length;i+=500){
+            const chunk=allowedRows.slice(i,i+500);
+            const contactsByPhone=new Map<string,typeof chunk[number]>();
+            for(const row of chunk)contactsByPhone.set(row.phone,row);
+            const c=await supabase.from("contacts").upsert([...contactsByPhone.values()].map(r=>({organization_id:orgId,name:r.name,phone:r.phone,cpf:r.cpf,email:r.email,notes:r.notes,source:"importacao"})),{onConflict:"organization_id,phone"}).select("id,phone");
+            if(c.error)throw new Error("Falha ao salvar clientes");
+            const ids=new Map((c.data||[]).map(x=>[x.phone,x.id]));
+            const inserts=chunk.map(r=>({organization_id:orgId,contact_id:ids.get(r.phone)!,product:r.product}));
+            if(inserts.length){
+              const l=await supabase.from("leads").insert(inserts);
+              if(l.error)throw new Error("Falha ao salvar leads");
+              imported+=inserts.length;
+            }
+          }
+          '''
+          # The embedded replacement is intentionally aligned to the source's indentation.
+          replacement = replacement.replace('          const rawRows', '   const rawRows').replace('\n          ', '\n   ')
           s = s[:start] + replacement + s[end:]
           imp.write_text(s, encoding='utf-8')
 
@@ -121,21 +129,26 @@ function AIProviders(){
           r = r.replace('contact:contacts(id,name,phone,blocked,npd)', 'contact:contacts(id,name,phone,blocked,blocked_reason,npd)', 1)
           crm.write_text(r, encoding='utf-8')
           print('Correções de fonte aplicadas.')
+          PY
 
       - name: Install dependencies
+        if: ${{ !startsWith(github.event.head_commit.message, 'repair:') }}
         run: npm install
 
       - name: TypeScript audit
+        if: ${{ !startsWith(github.event.head_commit.message, 'repair:') }}
         run: npm run typecheck
 
       - name: ESLint audit
+        if: ${{ !startsWith(github.event.head_commit.message, 'repair:') }}
         run: npm run lint
 
       - name: Production build audit
+        if: ${{ !startsWith(github.event.head_commit.message, 'repair:') }}
         run: npm run build
 
       - name: Commit only after every audit passes
-        shell: bash
+        if: ${{ !startsWith(github.event.head_commit.message, 'repair:') }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
