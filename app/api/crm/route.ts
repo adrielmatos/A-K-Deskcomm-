@@ -35,7 +35,7 @@ export async function GET(req:Request){
   const url=new URL(req.url); const resource=url.searchParams.get("resource")||"dashboard";
   if(resource==="dashboard"){
     const [leads,convs,followups,calls]=await Promise.all([
-      supabase.from("leads").select("id,product,stage,priority,created_at,contact:contacts(id,name,phone,blocked,npd)").order("created_at",{ascending:false}).limit(100),
+      supabase.from("leads").select("id,product,stage,priority,created_at,contact:contacts(id,name,phone,blocked,blocked_reason,npd)").order("created_at",{ascending:false}).limit(5000),
       supabase.from("conversations").select("id,channel,status,last_message_at,contact:contacts(id,name,phone)").order("last_message_at",{ascending:false,nullsFirst:false}).limit(50),
       supabase.from("followups").select("id,title,due_at,status,lead_id").eq("status","open").order("due_at").limit(50),
       supabase.from("call_logs").select("id,phone,result,duration_seconds,created_at,lead_id").order("created_at",{ascending:false}).limit(50)

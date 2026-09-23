@@ -1,4 +1,5 @@
 "use client";
+import { AIProviders } from "@/lib/ai-providers-global";
 
 import {useEffect,useMemo,useRef,useState,type ReactNode} from "react";
 import {createClient} from "@/lib/supabase/client";
