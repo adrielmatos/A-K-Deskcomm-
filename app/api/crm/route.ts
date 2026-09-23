@@ -187,6 +187,18 @@ export async function POST(req:Request){
       const row=await supabase.from("quick_replies").insert({organization_id:orgId,name:parsed.name,body:parsed.body}).select("id").single();
       if(row.error)return fail("Não foi possível criar resposta",400); return NextResponse.json({ok:true,id:row.data.id},{status:201});
     }
+    if(resource==="ai_agent"){
+      const name=String(body.data?.name||"").trim(); const model=String(body.data?.model||"").trim();
+      if(name.length<2||name.length>120)return fail("Nome do agente inválido");
+      const row=await supabase.from("ai_agents").insert({organization_id:orgId,name,model:model||null,enabled:false}).select("id").single();
+      if(row.error)return fail("Não foi possível criar agente",400); await audit(supabase,orgId,userId,"ai_agent.create","ai_agent",row.data.id); return NextResponse.json({ok:true,id:row.data.id},{status:201});
+    }
+    if(resource==="ai_skill"){
+      const name=String(body.data?.name||"").trim();
+      if(name.length<2||name.length>120)return fail("Nome da skill inválido");
+      const row=await supabase.from("ai_skills").insert({organization_id:orgId,name,description:"",instructions:""}).select("id").single();
+      if(row.error)return fail("Não foi possível criar skill",400); await audit(supabase,orgId,userId,"ai_skill.create","ai_skill",row.data.id); return NextResponse.json({ok:true,id:row.data.id},{status:201});
+    }
     if(resource==="campaign_update"){
       const id=String(body.data?.id||""); const status=String(body.data?.status||"");
       if(!id||!["draft","active","paused","finished"].includes(status))return fail("Status de campanha inválido");
