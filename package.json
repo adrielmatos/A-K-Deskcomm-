@@ -18,7 +18,8 @@
     "react-dom": "19.2.0",
     "zod": "4.6.5",
     "@upstash/redis": "1.38.4",
-    "@upstash/ratelimit": "2.1.0"
+    "@upstash/ratelimit": "2.1.0",
+    "ai": "^6.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.19.0",
