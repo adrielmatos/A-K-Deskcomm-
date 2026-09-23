@@ -1,6 +1,6 @@
 "use client";
 
-import {useEffect,useMemo,useRef,useState} from "react";
+import {useEffect,useMemo,useRef,useState,type ReactNode} from "react";
 import {createClient} from "@/lib/supabase/client";
 
 const nav=["Dashboard","Inbox","Radar","Kanban","Clientes","Follow-ups","Ligações","Campanhas","Automações","Respostas rápidas","Equipe","Auditoria","IA","Configurações"];
@@ -48,7 +48,7 @@ export default function Deskcomm({userId}:{userId:string}){
 }
 
 function icon(x:string){return x==="Dashboard"?"⌂":x==="Inbox"?"◉":x==="Ligações"?"☎":x==="Clientes"?"♙":x==="Kanban"?"▦":"•"}
-function Head({title,sub,action}:{title:string;sub:string;action?:React.ReactNode}){return <div className="title"><div><h1>{title}</h1><p>{sub}</p></div>{action}</div>}
+function Head({title,sub,action}:{title:string;sub:string;action?:ReactNode}){return <div className="title"><div><h1>{title}</h1><p>{sub}</p></div>{action}</div>}
 function Metric({a,b,c}:{a:string;b:string;c:string}){return <div className="card metric"><small>{a}</small><strong>{b}</strong><span>{c}</span></div>}
 function List({title,rows}:{title:string;rows:string[]}){return <div className="card"><h3>{title}</h3>{rows.length?rows.map((x,i)=><div className="row" key={i}>{x}</div>):<div className="empty">Nenhum registro.</div>}</div>}
 
