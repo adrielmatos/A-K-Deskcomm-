@@ -10,20 +10,20 @@ export const maxDuration=10;
 const PRODUCTS=["INSS","Público","Privado","Cartão consignado","Cartão benefício","Crédito pessoal","Seguro médico","Seguro residencial","Seguro funeral","Energia solar","FGTS","Crédito do Trabalhador/CLT","SIAPE","Militar"];
 
 function sameOrigin(req:Request){const origin=req.headers.get("origin");if(!origin)return true;try{return new URL(origin).origin===new URL(req.url).origin}catch{return false}}
-function fail(message="Operação não autorizada",status=400){return NextResponse.json({error:message},{status,headers:{"Cache-Control":"private, no-store, no-cache"}});}
+function fail(message="Operação não autorizada",status=400){return NextResponse.json({error:message},{status,headers:{"Cache-Control":"private, no-store, no-cache,max-age=0"}});}
 async function auth(){
   const supabase=await createClient();
   const {data,error}=await supabase.auth.getClaims();
   const userId=data?.claims?.sub;
-  if(error||!userId) return {supabase,userId:null,orgId:null};
+  if(error||!userId) return {supabase,userId:null,orgId:null,role:null};
   const {data:member}=await supabase.from("organization_members").select("organization_id,role").eq("user_id",userId).eq("status","active").limit(1).maybeSingle();
   if(member) return {supabase,userId,orgId:member.organization_id,role:member.role};
   const name="A&K Soluções Financeiras";
   const slug="ak-solucoes-financeiras";
   const org=await supabase.from("organizations").insert({name,slug,created_by:userId}).select("id").single();
-  if(org.error) return {supabase,userId,orgId:null};
+  if(org.error) return {supabase,userId,orgId:null,role:null};
   const m=await supabase.from("organization_members").insert({organization_id:org.data.id,user_id:userId,role:"owner"}).select("organization_id,role").single();
-  if(m.error) return {supabase,userId,orgId:null};
+  if(m.error) return {supabase,userId,orgId:null,role:null};
   return {supabase,userId,orgId:org.data.id,role:"owner"};
 }
 async function audit(supabase:Awaited<ReturnType<typeof createClient>>,orgId:string,userId:string,action:string,type:string,id?:string,metadata:Record<string,unknown>={}){if(!orgId||!userId)return;await supabase.from("audit_logs").insert({organization_id:orgId,actor_id:userId,action,resource_type:type,resource_id:id||null,metadata});}
@@ -31,7 +31,7 @@ async function audit(supabase:Awaited<ReturnType<typeof createClient>>,orgId:str
 export async function GET(req:Request){
   const ip=req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()||"unknown";
   const rl=await rateLimit("read:"+ip); if(!rl.ok)return fail("Muitas requisições",429);
-  const {supabase,userId,orgId}=await auth(); if(!userId||!orgId)return fail("Sessão necessária",401);
+  const {supabase,userId,orgId,role}=await auth(); if(!userId||!orgId)return fail("Sessão necessária",401);
   const url=new URL(req.url); const resource=url.searchParams.get("resource")||"dashboard";
   if(resource==="dashboard"){
     const [leads,convs,followups,calls]=await Promise.all([
@@ -40,7 +40,7 @@ export async function GET(req:Request){
       supabase.from("followups").select("id,title,due_at,status,lead_id").eq("status","open").order("due_at").limit(50),
       supabase.from("call_logs").select("id,phone,result,duration_seconds,created_at,lead_id").order("created_at",{ascending:false}).limit(50)
     ]);
-    return NextResponse.json({organizationId:orgId,products:PRODUCTS,leads:leads.data||[],conversations:convs.data||[],followups:followups.data||[],calls:calls.data||[]});
+    return NextResponse.json({organizationId:orgId,role,products:PRODUCTS,leads:leads.data||[],conversations:convs.data||[],followups:followups.data||[],calls:calls.data||[]});
   }
   if(resource==="messages"){
     const id=url.searchParams.get("conversation_id"); if(!id)return fail("conversation_id obrigatório");
@@ -148,5 +148,5 @@ export async function POST(req:Request){
       return NextResponse.json({ok:true});
     }
     return fail("Ação inválida");
-  }catch(e){return fail(e instanceof Error && e.name==="ZodError"?"Dados inválidos":"Falha na operação",400);}
+  }catch(e){return fail(e instanceof Error&&e.name==="ZodError"?"Dados inválidos":"Falha na operação",400);}
 }
