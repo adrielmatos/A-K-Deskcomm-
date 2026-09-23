@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   repair-audit:
-    if: !contains(github.event.head_commit.message, 'repair:')
+    if: ${{ !contains(github.event.head_commit.message, 'repair:') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -23,14 +23,9 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
-          import re
 
           desk = Path('app/deskcomm.tsx')
           text = desk.read_text(encoding='utf-8')
-
-          # The current A&K adapter references this component but the previous
-          # prototype accidentally omitted its definition. Keep the existing
-          # UI intact and add the missing real screen instead of rewriting the CRM.
           if 'function AIProviders(' not in text:
               marker = 'function Settings('
               pos = text.find(marker)
@@ -49,7 +44,6 @@ function AIProviders(){
 
 '''
               text = text[:pos] + component + text[pos:]
-
           text = text.replace('Customer 360', 'Visão 360 do cliente')
           desk.write_text(text, encoding='utf-8')
 
@@ -60,7 +54,8 @@ function AIProviders(){
           c = c.replace('.asideBottom{margin-top:auto}', '.asideBottom{margin-top:12px;flex:0 0 auto}')
           c = c.replace('section{padding:28px;', 'section{padding:28px;min-width:0;')
           c = c.replace('table{width:100%;border-collapse:collapse}', 'table{width:100%;min-width:760px;border-collapse:collapse}')
-          c += '\n/* Desktop/mobile stability: the complete navigation remains reachable without changing the original layout. */\naside::-webkit-scrollbar{width:6px}aside::-webkit-scrollbar-thumb{background:#2b3c58;border-radius:99px}.tablewrap{-webkit-overflow-scrolling:touch}\n'
+          if 'aside::-webkit-scrollbar' not in c:
+              c += '\n/* Desktop/mobile stability */\naside::-webkit-scrollbar{width:6px}aside::-webkit-scrollbar-thumb{background:#2b3c58;border-radius:99px}.tablewrap{-webkit-overflow-scrolling:touch}\n'
           css.write_text(c, encoding='utf-8')
 
           imp = Path('app/api/import/route.ts')
@@ -70,7 +65,6 @@ function AIProviders(){
           end = s.find(end_marker)
           if start == -1 or end == -1 or end <= start:
               raise SystemExit('Não encontrei o bloco de importação para corrigir')
-
           replacement = r'''   const rawRows:Record<string,unknown>[]=[];
    for(const sheetName of wb.SheetNames){
      const sheet=wb.Sheets[sheetName];
@@ -126,7 +120,6 @@ function AIProviders(){
           r = r.replace('.order("created_at",{ascending:false}).limit(100),', '.order("created_at",{ascending:false}).limit(5000),', 1)
           r = r.replace('contact:contacts(id,name,phone,blocked,npd)', 'contact:contacts(id,name,phone,blocked,blocked_reason,npd)', 1)
           crm.write_text(r, encoding='utf-8')
-
           print('Correções de fonte aplicadas.')
 
       - name: Install dependencies
