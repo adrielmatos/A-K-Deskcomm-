@@ -136,7 +136,7 @@ export async function POST(req:Request){
       if(!id||!Object.keys(patch).length)return fail("Dados do cliente inválidos");
       const row=await supabase.from("contacts").update(patch).eq("id",id).eq("organization_id",orgId).select("id").single();
       if(row.error)return fail("Cliente não encontrado",404);
-      await audit(supabase,orgId,userId,"contact.update","contact",id,Object.keys(patch));
+      await audit(supabase,orgId,userId,"contact.update","contact",id,{fields:Object.keys(patch)});
       return NextResponse.json({ok:true});
     }
     if(resource==="followup_update"){
