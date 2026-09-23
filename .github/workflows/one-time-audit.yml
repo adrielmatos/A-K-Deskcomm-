@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Patch validated source fixes
-        run: python3 -c 'from pathlib import Path; p=Path("app/api/crm/route.ts"); s=p.read_text(); s=s.replace(".order(\"created_at\",{ascending:false}).limit(100),", ".order(\"created_at\",{ascending:false}).limit(5000),", 1); s=s.replace("contact:contacts(id,name,phone,blocked,npd)", "contact:contacts(id,name,phone,blocked,blocked_reason,npd)", 1); p.write_text(s); d=Path("app/deskcomm.tsx"); t=d.read_text(); marker="import { AIProviders } from \"@/lib/ai-providers-global\";"; t=t if marker in t else t.replace("\"use client\";", "\"use client\";\\n"+marker, 1); d.write_text(t)'
+        run: python3 -c 'from pathlib import Path; p=Path("app/api/crm/route.ts"); s=p.read_text(); s=s.replace(".order(\"created_at\",{ascending:false}).limit(100),", ".order(\"created_at\",{ascending:false}).limit(5000),", 1); s=s.replace("contact:contacts(id,name,phone,blocked,npd)", "contact:contacts(id,name,phone,blocked,blocked_reason,npd)", 1); p.write_text(s); d=Path("app/deskcomm.tsx"); t=d.read_text(); marker="import { AIProviders } from \"@/lib/ai-providers-global\";"; t=t if marker in t else t.replace("\"use client\";", "\"use client\";"+chr(10)+marker, 1); d.write_text(t)'
       - name: Install
         run: npm install
       - name: TypeScript
