@@ -3,7 +3,7 @@
 import {useEffect,useMemo,useRef,useState,type ReactNode} from "react";
 import {createClient} from "@/lib/supabase/client";
 
-const nav=["Dashboard","Inbox","Radar","Kanban","Clientes","Follow-ups","Ligações","Campanhas","Automações","Respostas rápidas","Equipe","Auditoria","IA","Configurações"];
+const nav=["Dashboard","Inbox","Radar","Kanban","Clientes","Follow-ups","Ligações","Campanhas","Automações","Respostas rápidas","Equipe","Auditoria","IA","Provedores de IA","Configurações"];
 const products=["INSS","Público","Privado","Cartão consignado","Cartão benefício","Crédito pessoal","Seguro médico","Seguro residencial","Seguro funeral","Energia solar","FGTS","Crédito do Trabalhador/CLT","SIAPE","Militar"];
 const stages=["Novo","Contato","Proposta","Negociação","Fechado","Perdido"];
 
@@ -38,7 +38,7 @@ export default function Deskcomm({userId}:{userId:string}){
     {v==="Respostas rápidas"&&<QuickReplies post={post} get={get}/>}
     {v==="Equipe"&&<Module resource="team" title="Equipe" sub="Membros reais da organização" get={get}/>}
     {v==="Auditoria"&&<Module resource="audit" title="Auditoria" sub="Trilha real de operações" get={get}/>}
-    {v==="IA"&&<AI post={post} get={get}/>}
+    {v==="IA"&&<AI post={post} get={get}/>}\n    {v==="Provedores de IA"&&<AIProviders/>}
     {v==="Configurações"&&<Settings role={role}/>}
    </section>
   </main>
