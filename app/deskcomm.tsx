@@ -105,7 +105,7 @@ function AI({post,get}:{post:(r:string,x:any)=>Promise<boolean>;get:(r:string)=>
    <h3>Provedores e modelos</h3>
    <p className="muted">O catálogo fica no CRM. A execução usa AI Gateway, sem expor chaves no navegador.</p>
    {models.map(([id,label,cost,desc])=><button key={id} className={model===id?"modelChoice active":"modelChoice"} onClick={()=>setModel(id)}><span><b>{label}</b><small>{desc}</small></span><span className="pill">{cost}</span></button>)}
-   <div className="notice">Modo econômico: GPT-5.6 Luna. O AI Gateway informa atualmente US$ 5 de créditos a cada 30 dias para usuários gratuitos; depois disso, o uso é cobrado conforme o provedor/modelo. citeturn1search0turn0search7</div>
+   <div className="notice">Modo econômico: GPT-5.6 Luna. O AI Gateway oferece créditos promocionais para usuários gratuitos; depois disso, o uso segue o preço do provedor/modelo.</div>
   </div>
   <div className="card">
    <h3>Teste operacional da IA</h3>
