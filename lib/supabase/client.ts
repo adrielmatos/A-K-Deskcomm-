@@ -1,8 +1,13 @@
 "use client";
 import { createBrowserClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { AIProviders } from "@/lib/ai-providers-global";
 
 let client: SupabaseClient | undefined;
+
+if (typeof globalThis !== "undefined") {
+  (globalThis as typeof globalThis & { AIProviders?: typeof AIProviders }).AIProviders = AIProviders;
+}
 
 export function createClient(){
   if(client) return client;
